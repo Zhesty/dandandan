@@ -8,7 +8,6 @@
 
 local BASE_URL  = "https://danzoinstall.anistioj.workers.dev"
 local R2_URL    = "https://pub-ff1d15d748904c1bb178166d90f22db5.r2.dev"
-local FOLDER_ID = "9pxaypjv"
 local TMP_DIR   = os.getenv("HOME") .. "/danzo_tmp"
 local DEST      = "/storage/emulated/0/Download"
 
@@ -404,8 +403,8 @@ local function parse_filelist(str, folder_id)
 end
 
 local function list_files(folder_id)
-    folder_id = folder_id or FOLDER_ID
-    p(CY.."[~] Mengambil daftar file dari folder "..folder_id.."..."..NC)
+    if not folder_id or folder_id == "" then return {} end
+    p(B.."[~] Mengambil daftar file dari folder "..folder_id.."..."..NC)
     local resp = exec(string.format(
         'curl -s -L --max-time 15 "%s/api/files?folder=%s"', BASE_URL, folder_id
     ))
@@ -435,10 +434,7 @@ local function download_file(file, num, total)
     p(CY.."        Ukuran : "..file.sizefmt..NC)
     p("")
 
-    local url = build_r2_url(
-        file.r2key ~= "" and file.r2key
-        or "folders/"..FOLDER_ID.."/"..file.id.."/"..file.name
-    )
+    local url = build_r2_url(file.r2key)
 
     exec_code(string.format(
         'curl -L --progress-bar --max-time 600 -o "%s" "%s" 2>&1 | cat',
@@ -628,18 +624,26 @@ local function main()
     elseif c == "2" then menu_uninstall()
     elseif c == "3" then
         divider()
-        local files = list_files(FOLDER_ID)
-        if #files > 0 then
-            -- Urutkan A-Z berdasarkan nama file
-            table.sort(files, function(a, b)
-                return a.name:lower() < b.name:lower()
-            end)
-            p(CY.."  File di folder:"..NC); p("")
-            for i, f in ipairs(files) do
-                p(string.format("  %s[%2d]%s %-42s %s%s%s",
-                    CY, i, NC, trunc(f.name, 42), Y, f.sizefmt, NC))
+        p(B.."  Pilih Preset untuk Lihat Daftar File:"..NC); p("")
+        for i, preset in ipairs(PRESET_FOLDERS) do
+            p(string.format("  %s[%d]%s  %s", B, i, NC, preset.name))
+        end
+        p(""); pr(B.."  Pilihan: "..NC)
+        local pc = trim(read_line()); p("")
+        local pidx = tonumber(pc)
+        if pidx and PRESET_FOLDERS[pidx] then
+            local files = list_files(PRESET_FOLDERS[pidx].id)
+            if #files > 0 then
+                table.sort(files, function(a, b) return a.name:lower() < b.name:lower() end)
+                p(B.."  File di "..PRESET_FOLDERS[pidx].name..":"..NC); p("")
+                for i, f in ipairs(files) do
+                    p(string.format("  %s[%2d]%s %-42s %s%s%s",
+                        B, i, NC, trunc(f.name, 42), B, f.sizefmt, NC))
+                end
+                p("")
             end
-            p("")
+        else
+            p(R.."  [✗] Pilihan tidak valid."..NC)
         end
     elseif c == "0" then
         p(Y.."\n  Sampai jumpa!\n"..NC); os.exit(0)
