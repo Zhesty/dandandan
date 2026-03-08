@@ -378,7 +378,7 @@ end
 -- ════════════════════════════════════════════════════════════
 --   DOWNLOAD & INSTALL (DanzoInstall R2)
 -- ════════════════════════════════════════════════════════════
-local function parse_filelist(str)
+local function parse_filelist(str, folder_id)
     local files = {}
     for obj in str:gmatch("{([^{}]+)}") do
         local name = obj:match('"name"%s*:%s*"([^"]+)"')
@@ -388,13 +388,16 @@ local function parse_filelist(str)
             local size  = obj:match('"size"%s*:%s*(%d+)')
             local szfmt = obj:match('"sizeFormatted"%s*:%s*"([^"]+)"')
             if r2key then r2key = r2key:gsub("\\/", "/") end
-            table.insert(files, {
-                name    = name,
-                id      = id or "",
-                r2key   = r2key or "",
-                size    = tonumber(size) or 0,
-                sizefmt = szfmt or "",
-            })
+            -- Filter: hanya file yang r2key-nya mengandung folder_id
+            if not folder_id or (r2key and r2key:find(folder_id, 1, true)) then
+                table.insert(files, {
+                    name    = name,
+                    id      = id or "",
+                    r2key   = r2key or "",
+                    size    = tonumber(size) or 0,
+                    sizefmt = szfmt or "",
+                })
+            end
         end
     end
     return files
@@ -407,7 +410,7 @@ local function list_files(folder_id)
         'curl -s -L --max-time 15 "%s/api/files?folder=%s"', BASE_URL, folder_id
     ))
     if resp:find('"files"') then
-        local files = parse_filelist(resp)
+        local files = parse_filelist(resp, folder_id)
         if #files > 0 then
             p(G.."[✓] Ditemukan "..#files.." file."..NC); p("")
             return files
@@ -498,7 +501,7 @@ local function menu_download()
     local active_folder = preset.id
 
     divider()
-    p(B..G.."  Folder: "..preset.name..NC); p("")
+    p(B.."  Folder: "..preset.name..NC); p("")
 
     -- ── 2. Ambil daftar file dari folder ────────────────────
     local files = list_files(active_folder)
@@ -520,61 +523,13 @@ local function menu_download()
         return a.name:lower() < b.name:lower()
     end)
 
-    -- ── 3. Cek file yang sudah ada di /sdcard/Download ──────
-    local already_local = {}
-    for _, f in ipairs(apk_files) do
-        local lpath = find_local_apk(f.name)
-        already_local[f.name] = lpath
-    end
-
-    local has_local = false
-    for _, v in pairs(already_local) do
-        if v then has_local = true; break end
-    end
-
-    if has_local then
-        divider()
-        p(B..Y.."  ⚡ File berikut sudah ada di /sdcard/Download:"..NC); p("")
-        for _, f in ipairs(apk_files) do
-            if already_local[f.name] then
-                p(G.."    ✔  "..NC..trunc(f.name, 42))
-            end
-        end
-        p("")
-        pr(Y.."  Auto-install file yang sudah ada? (y/n): "..NC)
-        local ans = trim(read_line()):lower(); p("")
-        if ans == "y" then
-            divider()
-            p(B.."  📲 Auto-Install file lokal..."..NC); p("")
-            local ok_l, fail_l = 0, 0
-            local local_list = {}
-            for _, f in ipairs(apk_files) do
-                if already_local[f.name] then table.insert(local_list, f) end
-            end
-            for i, f in ipairs(local_list) do
-                local ok = install_apk(already_local[f.name], i, #local_list)
-                if ok then ok_l = ok_l+1 else fail_l = fail_l+1 end
-            end
-            divider()
-            p(B.."  📊 Hasil Auto-Install:"..NC); p("")
-            p(G.."  Berhasil : "..ok_l..NC)
-            p(R.."  Gagal    : "..fail_l..NC)
-            divider(); p("")
-            pr(B.."  [Enter] lanjut ke pilih APK download..."..NC)
-            read_line(); p("")
-        end
-    end
-
-    -- ── 4. Tampilkan daftar APK untuk dipilih ───────────────
+    -- ── 3. Tampilkan daftar APK untuk dipilih ───────────────
     divider()
     p(B.."  APK tersedia di "..preset.name..":"..NC); p("")
     for i, f in ipairs(apk_files) do
-        local tag = already_local[f.name] and (G.."[✔]"..NC) or "   "
-        p(string.format("  %s %s[%2d]%s %-40s %s%s%s",
-            tag, CY, i, NC, trunc(f.name, 40), Y, f.sizefmt, NC))
+        p(string.format("  %s[%2d]%s %-42s %s%s%s",
+            CY, i, NC, trunc(f.name, 42), Y, f.sizefmt, NC))
     end
-    p("")
-    p(CY.."  [✔] = sudah ada di /sdcard/Download"..NC)
     p("")
     p("  Pilih APK yang ingin didownload & install:")
     p(Y.."  Contoh: 1  |  1,3  |  2-4  |  all"..NC)
@@ -590,6 +545,12 @@ local function menu_download()
     local to_process = {}
     for _, i in ipairs(sel) do table.insert(to_process, apk_files[i]) end
 
+    -- ── 4. Deteksi file pilihan yang sudah ada di /sdcard/Download ──
+    local already_local = {}
+    for _, f in ipairs(to_process) do
+        already_local[f.name] = find_local_apk(f.name)
+    end
+
     -- ── 5. Download yang belum ada, skip yang sudah ada ─────
     p(""); divider()
     p(B.."  📥 Proses Download ("..#to_process.." file)..."..NC); p("")
@@ -599,12 +560,11 @@ local function menu_download()
         local lpath = already_local[f.name]
         if lpath then
             divider()
-            p(string.format("  [%d/%d] ⚡ "..G.."%s"..NC, i, #to_process, trunc(f.name, 36)))
-            p(G.."        [✔] Pakai file lokal — skip download"..NC); p("")
+            p(string.format("  [%d/%d] "..B.."%s"..NC, i, #to_process, trunc(f.name, 36)))
+            p(B.."        [✔] File sudah ada lokal — skip download"..NC); p("")
             table.insert(dl_paths, lpath)
             skip_count = skip_count + 1
         else
-            -- patch r2key agar pakai active_folder
             local ff = {}
             for k, v in pairs(f) do ff[k] = v end
             if ff.r2key == "" then
@@ -630,16 +590,16 @@ local function menu_download()
     p(B.."  📊 Ringkasan Install — "..preset.name..":"..NC); p("")
     for i, f in ipairs(to_process) do
         if statuses[i] == "OK" then
-            p(G.."  [✓] "..NC..trunc(f.name, 38))
+            p(B.."  [✓] "..NC..trunc(f.name, 38))
         else
-            p(R.."  [✗] "..NC..trunc(f.name, 38))
+            p(B.."  [✗] "..NC..trunc(f.name, 38))
         end
     end
     p("")
-    p(G.."  Berhasil   : "..ok_count..NC)
-    p(R.."  Gagal      : "..fail_count..NC)
+    p(B.."  Berhasil   : "..ok_count..NC)
+    p(B.."  Gagal      : "..fail_count..NC)
     if skip_count > 0 then
-        p(Y.."  Lokal skip : "..skip_count..NC)
+        p(B.."  Lokal skip : "..skip_count..NC)
     end
     divider(); p("")
 end
