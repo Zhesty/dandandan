@@ -585,6 +585,11 @@ local function menu_download()
         else        fail_count = fail_count+1; table.insert(statuses, "GAGAL") end
     end
 
+    -- ── 7. Hapus semua file setelah proses selesai ───────────
+    for i, _ in ipairs(to_process) do
+        if dl_paths[i] then os.remove(dl_paths[i]) end
+    end
+
     -- ── 7. Ringkasan ─────────────────────────────────────────
     divider()
     p(B.."  📊 Ringkasan Install — "..preset.name..":"..NC); p("")
