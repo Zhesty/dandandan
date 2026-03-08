@@ -12,12 +12,20 @@ local FOLDER_ID = "9pxaypjv"
 local TMP_DIR   = os.getenv("HOME") .. "/danzo_tmp"
 local DEST      = "/storage/emulated/0/Download"
 
+-- ── Preset Folders ───────────────────────────────────────────
+local PRESET_FOLDERS = {
+    { name = "Codex",   id = "2z8whpzj" },
+    { name = "Cryptic", id = "844gr7st" },
+    { name = "Delta",   id = "v8jf3etu" },
+    { name = "Ronix",   id = "dzf52ez7" },
+}
+
 -- ── Warna ───────────────────────────────────────────────────
-local R  = "\27[0;31m"
-local G  = "\27[0;32m"
-local Y  = "\27[1;33m"
+local R  = "\27[0m"
+local G  = "\27[0m"
+local Y  = "\27[0m"
 local B  = "\27[1m"
-local CY = "\27[0;36m"
+local CY = "\27[1m"
 local NC = "\27[0m"
 
 -- ── Print helpers ────────────────────────────────────────────
@@ -88,14 +96,10 @@ end
 local function banner()
     exec_code("clear 2>/dev/null")
     divider()
-    p(CY..B..[[
-   ____              ___        _        _ _
-  |  _ \  __ _ _ __|_ _|_ __  | |_ __ _| | |
-  | | | |/ _` | '_ \| || '_ \ | __/ _` | | |
-  | |_| | (_| | | | | || | | || || (_| | | |
-  |____/ \__,_|_| |_|___|_| |_| \__\__,_|_|_|]]..NC)
-    divider()
-    p(B.."  DanzoInstall Termux Manager v12"..NC)
+    local title = "IPANTOOLS"
+    local width = 44
+    local pad = math.floor((width - #title) / 2)
+    p(B..string.rep(" ", pad)..title..NC)
     divider()
 end
 
@@ -396,10 +400,11 @@ local function parse_filelist(str)
     return files
 end
 
-local function list_files()
-    p(CY.."[~] Mengambil daftar file dari folder "..FOLDER_ID.."..."..NC)
+local function list_files(folder_id)
+    folder_id = folder_id or FOLDER_ID
+    p(CY.."[~] Mengambil daftar file dari folder "..folder_id.."..."..NC)
     local resp = exec(string.format(
-        'curl -s -L --max-time 15 "%s/api/files?folder=%s"', BASE_URL, FOLDER_ID
+        'curl -s -L --max-time 15 "%s/api/files?folder=%s"', BASE_URL, folder_id
     ))
     if resp:find('"files"') then
         local files = parse_filelist(resp)
@@ -448,11 +453,55 @@ local function download_file(file, num, total)
     end
 end
 
-local function menu_download()
-    divider()
-    p(B..G.."  Auto Download & Install APK"..NC); p("")
+-- ── Cek file lokal di /sdcard/Download ──────────────────────
+local function find_local_apk(filename)
+    local safe = filename:gsub("[/\\:*?\"<>|]", "_")
+    local path = DEST.."/"..safe
+    if file_exists(path) then return path end
+    return nil
+end
 
-    local files = list_files()
+-- ── Pilih Preset Folder ──────────────────────────────────────
+local function select_preset_folder()
+    exec_code("clear 2>/dev/null")
+    divider()
+    p(B..G.."  📥  Auto Download & Install APK"..NC)
+    divider(); p("")
+    p(B.."  Pilih Preset Folder:"..NC); p("")
+
+    local colors = { G, CY, Y, R }
+    for i, preset in ipairs(PRESET_FOLDERS) do
+        local col = colors[i] or NC
+        p(string.format("  %s[%d]%s  %s", col, i, NC, preset.name))
+    end
+    p("")
+    p(string.format("  %s[0]%s  ← Kembali ke Menu Utama", B, NC))
+    p("")
+    divider()
+    pr(B.."  Pilihan: "..NC)
+    local c = trim(read_line()); p("")
+
+    local idx = tonumber(c)
+    if c == "0" then return nil end
+    if idx and PRESET_FOLDERS[idx] then
+        return PRESET_FOLDERS[idx]
+    end
+    p(R.."  [✗] Pilihan tidak valid."..NC); p("")
+    return nil
+end
+
+local function menu_download()
+    -- ── 1. Pilih preset folder ───────────────────────────────
+    local preset = select_preset_folder()
+    if not preset then return end
+
+    local active_folder = preset.id
+
+    divider()
+    p(B..G.."  Folder: "..preset.name..NC); p("")
+
+    -- ── 2. Ambil daftar file dari folder ────────────────────
+    local files = list_files(active_folder)
     if #files == 0 then return end
 
     local apk_files = {}
@@ -466,18 +515,66 @@ local function menu_download()
         p(""); return
     end
 
-    -- Urutkan A-Z berdasarkan nama file
+    -- Urutkan A-Z
     table.sort(apk_files, function(a, b)
         return a.name:lower() < b.name:lower()
     end)
 
-    -- Tampilkan daftar
-    divider()
-    p(B.."  APK tersedia:"..NC); p("")
-    for i, f in ipairs(apk_files) do
-        p(string.format("  %s[%2d]%s %-42s %s%s%s",
-            CY, i, NC, trunc(f.name, 42), Y, f.sizefmt, NC))
+    -- ── 3. Cek file yang sudah ada di /sdcard/Download ──────
+    local already_local = {}
+    for _, f in ipairs(apk_files) do
+        local lpath = find_local_apk(f.name)
+        already_local[f.name] = lpath
     end
+
+    local has_local = false
+    for _, v in pairs(already_local) do
+        if v then has_local = true; break end
+    end
+
+    if has_local then
+        divider()
+        p(B..Y.."  ⚡ File berikut sudah ada di /sdcard/Download:"..NC); p("")
+        for _, f in ipairs(apk_files) do
+            if already_local[f.name] then
+                p(G.."    ✔  "..NC..trunc(f.name, 42))
+            end
+        end
+        p("")
+        pr(Y.."  Auto-install file yang sudah ada? (y/n): "..NC)
+        local ans = trim(read_line()):lower(); p("")
+        if ans == "y" then
+            divider()
+            p(B.."  📲 Auto-Install file lokal..."..NC); p("")
+            local ok_l, fail_l = 0, 0
+            local local_list = {}
+            for _, f in ipairs(apk_files) do
+                if already_local[f.name] then table.insert(local_list, f) end
+            end
+            for i, f in ipairs(local_list) do
+                local ok = install_apk(already_local[f.name], i, #local_list)
+                if ok then ok_l = ok_l+1 else fail_l = fail_l+1 end
+            end
+            divider()
+            p(B.."  📊 Hasil Auto-Install:"..NC); p("")
+            p(G.."  Berhasil : "..ok_l..NC)
+            p(R.."  Gagal    : "..fail_l..NC)
+            divider(); p("")
+            pr(B.."  [Enter] lanjut ke pilih APK download..."..NC)
+            read_line(); p("")
+        end
+    end
+
+    -- ── 4. Tampilkan daftar APK untuk dipilih ───────────────
+    divider()
+    p(B.."  APK tersedia di "..preset.name..":"..NC); p("")
+    for i, f in ipairs(apk_files) do
+        local tag = already_local[f.name] and (G.."[✔]"..NC) or "   "
+        p(string.format("  %s %s[%2d]%s %-40s %s%s%s",
+            tag, CY, i, NC, trunc(f.name, 40), Y, f.sizefmt, NC))
+    end
+    p("")
+    p(CY.."  [✔] = sudah ada di /sdcard/Download"..NC)
     p("")
     p("  Pilih APK yang ingin didownload & install:")
     p(Y.."  Contoh: 1  |  1,3  |  2-4  |  all"..NC)
@@ -490,32 +587,48 @@ local function menu_download()
         p(R.."  Pilihan tidak valid."..NC); return
     end
 
-    local to_install = {}
-    for _, i in ipairs(sel) do table.insert(to_install, apk_files[i]) end
+    local to_process = {}
+    for _, i in ipairs(sel) do table.insert(to_process, apk_files[i]) end
 
-    -- Download semua dulu
+    -- ── 5. Download yang belum ada, skip yang sudah ada ─────
     p(""); divider()
-    p(B.."  📥 Download ("..#to_install.." file)..."..NC); p("")
+    p(B.."  📥 Proses Download ("..#to_process.." file)..."..NC); p("")
     local dl_paths = {}
-    for i, f in ipairs(to_install) do
-        table.insert(dl_paths, download_file(f, i, #to_install))
+    local skip_count = 0
+    for i, f in ipairs(to_process) do
+        local lpath = already_local[f.name]
+        if lpath then
+            divider()
+            p(string.format("  [%d/%d] ⚡ "..G.."%s"..NC, i, #to_process, trunc(f.name, 36)))
+            p(G.."        [✔] Pakai file lokal — skip download"..NC); p("")
+            table.insert(dl_paths, lpath)
+            skip_count = skip_count + 1
+        else
+            -- patch r2key agar pakai active_folder
+            local ff = {}
+            for k, v in pairs(f) do ff[k] = v end
+            if ff.r2key == "" then
+                ff.r2key = "folders/"..active_folder.."/"..ff.id.."/"..ff.name
+            end
+            table.insert(dl_paths, download_file(ff, i, #to_process))
+        end
     end
 
-    -- Install satu per satu
+    -- ── 6. Install ───────────────────────────────────────────
     divider()
-    p(B.."  📲 Install ("..#to_install.." file)..."..NC); p("")
+    p(B.."  📲 Install ("..#to_process.." file)..."..NC); p("")
     local ok_count, fail_count = 0, 0
     local statuses = {}
-    for i = 1, #to_install do
-        local ok = install_apk(dl_paths[i], i, #to_install)
+    for i = 1, #to_process do
+        local ok = install_apk(dl_paths[i], i, #to_process)
         if ok then ok_count = ok_count+1; table.insert(statuses, "OK")
         else        fail_count = fail_count+1; table.insert(statuses, "GAGAL") end
     end
 
-    -- Ringkasan
+    -- ── 7. Ringkasan ─────────────────────────────────────────
     divider()
-    p(B.."  📊 Ringkasan Install:"..NC); p("")
-    for i, f in ipairs(to_install) do
+    p(B.."  📊 Ringkasan Install — "..preset.name..":"..NC); p("")
+    for i, f in ipairs(to_process) do
         if statuses[i] == "OK" then
             p(G.."  [✓] "..NC..trunc(f.name, 38))
         else
@@ -523,8 +636,11 @@ local function menu_download()
         end
     end
     p("")
-    p(G.."  Berhasil : "..ok_count..NC)
-    p(R.."  Gagal    : "..fail_count..NC)
+    p(G.."  Berhasil   : "..ok_count..NC)
+    p(R.."  Gagal      : "..fail_count..NC)
+    if skip_count > 0 then
+        p(Y.."  Lokal skip : "..skip_count..NC)
+    end
     divider(); p("")
 end
 
@@ -547,7 +663,7 @@ local function main()
     elseif c == "2" then menu_uninstall()
     elseif c == "3" then
         divider()
-        local files = list_files()
+        local files = list_files(FOLDER_ID)
         if #files > 0 then
             -- Urutkan A-Z berdasarkan nama file
             table.sort(files, function(a, b)
