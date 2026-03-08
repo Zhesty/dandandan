@@ -466,6 +466,11 @@ local function menu_download()
         p(""); return
     end
 
+    -- Urutkan A-Z berdasarkan nama file
+    table.sort(apk_files, function(a, b)
+        return a.name:lower() < b.name:lower()
+    end)
+
     -- Tampilkan daftar
     divider()
     p(B.."  APK tersedia:"..NC); p("")
@@ -544,6 +549,10 @@ local function main()
         divider()
         local files = list_files()
         if #files > 0 then
+            -- Urutkan A-Z berdasarkan nama file
+            table.sort(files, function(a, b)
+                return a.name:lower() < b.name:lower()
+            end)
             p(CY.."  File di folder:"..NC); p("")
             for i, f in ipairs(files) do
                 p(string.format("  %s[%2d]%s %-42s %s%s%s",
