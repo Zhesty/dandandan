@@ -535,9 +535,8 @@ local function menu_download()
     local input = trim(read_line()); p("")
     input = input:gsub("\r", "")
 
-    if input == "" or input == "0" then
-        return menu_download()
-    end
+    if input == "0" then return end
+    if input == "" then return menu_download() end
 
     local sel = parse_selection(input, #apk_files)
     if #sel == 0 then
@@ -609,6 +608,7 @@ local function menu_download()
         p(B.."  Lokal skip : "..skip_count..NC)
     end
     divider(); p("")
+    os.exit(0)
 end
 
 
