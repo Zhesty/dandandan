@@ -404,7 +404,7 @@ end
 
 local function list_files(folder_id)
     if not folder_id or folder_id == "" then return {} end
-    p(B.."[~] Mengambil daftar file dari folder "..folder_id.."..."..NC)
+    p(B.."[~] Mengambil daftar file..."..NC)
     local resp = exec(string.format(
         'curl -s -L --max-time 15 "%s/api/files?folder=%s"', BASE_URL, folder_id
     ))
