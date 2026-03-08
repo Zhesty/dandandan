@@ -126,11 +126,12 @@ end
 -- ════════════════════════════════════════════════════════════
 local function parse_selection(input, max)
     input = trim(input):lower()
-    if input == "all" or input == "" then
+    if input == "all" then
         local sel = {}
         for i = 1, max do table.insert(sel, i) end
         return sel
     end
+    if input == "" then return {} end
     local selected, seen = {}, {}
     for part in (input..","):gmatch("([^,]+),") do
         part = trim(part)
@@ -532,6 +533,7 @@ local function menu_download()
     divider()
     pr(B.."  Pilihan: "..NC)
     local input = trim(read_line()); p("")
+    input = input:gsub("\r", "")
 
     if input == "" or input == "0" then
         return menu_download()
