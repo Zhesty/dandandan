@@ -8,8 +8,10 @@
 
 local BASE_URL  = "https://danzoinstall.anistioj.workers.dev"
 local R2_URL    = "https://pub-ff1d15d748904c1bb178166d90f22db5.r2.dev"
-local TMP_DIR   = os.getenv("HOME") .. "/danzo_tmp"
-local DEST      = "/storage/emulated/0/Download"
+local TMP_DIR      = os.getenv("HOME") .. "/danzo_tmp"
+local DEST         = "/storage/emulated/0/Download"
+local COOKIE_FILE  = "/storage/emulated/0/Download/cookie.txt"
+local WEBHOOK_CFG  = os.getenv("HOME") .. "/danzo_tmp/webhook.cfg"
 
 -- ── Preset Folders ───────────────────────────────────────────
 local PRESET_FOLDERS = {
@@ -613,6 +615,149 @@ end
 
 
 -- ════════════════════════════════════════════════════════════
+--   WEBHOOK
+-- ════════════════════════════════════════════════════════════
+local function load_webhook()
+    local f = io.open(WEBHOOK_CFG, "r")
+    if not f then return "" end
+    local url = trim(f:read("*l") or ""); f:close()
+    return url
+end
+
+local function save_webhook(url)
+    local f = io.open(WEBHOOK_CFG, "w")
+    if not f then return false end
+    f:write(url.."\n"); f:close()
+    return true
+end
+
+local function menu_webhook()
+    exec_code("clear 2>/dev/null")
+    divider()
+    p(B.."  📤  Kirim Cookie ke Webhook"..NC)
+    divider(); p("")
+
+    local webhook_url = load_webhook()
+
+    -- Tampilkan URL tersimpan
+    if webhook_url ~= "" then
+        p(B.."  Webhook aktif:"..NC)
+        p("  "..trunc(webhook_url, 55)); p("")
+    else
+        p(B.."  [!] Belum ada webhook URL tersimpan."..NC); p("")
+    end
+
+    p(B.."  [1]"..NC.."  Kirim cookie.txt sekarang")
+    p(B.."  [2]"..NC.."  Set / Ganti Webhook URL")
+    p(B.."  [0]"..NC.."  Kembali")
+    p(""); divider()
+    pr(B.."  Pilihan: "..NC)
+    local c = trim(read_line()); p("")
+
+    if c == "2" then
+        -- Setting webhook URL
+        divider()
+        p(B.."  Masukkan Webhook URL:"..NC); p("")
+        pr(B.."  URL: "..NC)
+        local new_url = trim(read_line()); p("")
+        if new_url == "" then
+            p(B.."  [!] URL kosong, batal."..NC)
+        elseif not new_url:match("^https?://") then
+            p(B.."  [✗] URL tidak valid."..NC)
+        else
+            if save_webhook(new_url) then
+                p(B.."  [✓] Webhook URL berhasil disimpan."..NC)
+            else
+                p(B.."  [✗] Gagal menyimpan URL."..NC)
+            end
+        end
+        p(""); pr(B.."  [Enter] lanjut..."..NC); read_line()
+        return menu_webhook()
+
+    elseif c == "1" then
+        -- Kirim cookie.txt
+        divider()
+        if webhook_url == "" then
+            p(B.."  [✗] Webhook URL belum diset. Pilih [1] dulu."..NC)
+            p(""); pr(B.."  [Enter] lanjut..."..NC); read_line()
+            return menu_webhook()
+        end
+
+        if not file_exists(COOKIE_FILE) then
+            p(B.."  [✗] File tidak ditemukan: "..COOKIE_FILE..NC)
+            p(""); pr(B.."  [Enter] lanjut..."..NC); read_line()
+            return menu_webhook()
+        end
+
+        -- Baca isi cookie.txt per baris
+        local lines = {}
+        local f = io.open(COOKIE_FILE, "r")
+        for line in f:lines() do
+            line = trim(line)
+            if line ~= "" then table.insert(lines, line) end
+        end
+        f:close()
+
+        if #lines == 0 then
+            p(B.."  [!] File cookie.txt kosong."..NC)
+            p(""); pr(B.."  [Enter] lanjut..."..NC); read_line()
+            return menu_webhook()
+        end
+
+        p(B.."[~] Mengirim "..#lines.." baris ke webhook..."..NC); p("")
+
+        local ok_send = true
+        local ok_count_w, fail_count_w = 0, 0
+        local tmp_payload = TMP_DIR.."/wh_payload.json"
+
+        for i, line in ipairs(lines) do
+            local pf = io.open(tmp_payload, "w")
+            if not pf then
+                p(B.."  [✗] Gagal buat file temp."..NC)
+                ok_send = false; break
+            end
+            local escaped = line:gsub('\\', '\\\\')
+                                 :gsub('"',  '\\"')
+                                 :gsub('\r', '')
+                                 :gsub('\t', '\\t')
+            pf:write('{"content":"```\\n'..escaped..'\\n```"}')
+            pf:close()
+
+            local out = exec(string.format(
+                'curl -s -o /dev/null -w "%%{http_code}" -X POST -H "Content-Type: application/json" --data-binary @"%s" "%s"',
+                tmp_payload, webhook_url
+            ))
+            local code = trim(out)
+            if code == "200" or code == "204" then
+                ok_count_w = ok_count_w + 1
+            else
+                fail_count_w = fail_count_w + 1
+                ok_send = false
+                p(B.."  [✗] Baris "..i.." gagal (HTTP "..code..")"..NC)
+            end
+        end
+
+        os.remove(tmp_payload)
+
+        if ok_send then
+            p(B.."  [✓] Semua "..ok_count_w.." baris berhasil dikirim!"..NC)
+        else
+            p(B.."  Berhasil : "..ok_count_w..NC)
+            p(B.."  Gagal    : "..fail_count_w..NC)
+        end
+        p(""); pr(B.."  [Enter] lanjut..."..NC); read_line()
+        return menu_webhook()
+
+    elseif c == "0" then
+        return
+    else
+        p(B.."  [✗] Pilihan tidak valid."..NC)
+        p(""); pr(B.."  [Enter] lanjut..."..NC); read_line()
+        return menu_webhook()
+    end
+end
+
+-- ════════════════════════════════════════════════════════════
 --   MAIN MENU
 -- ════════════════════════════════════════════════════════════
 local function main()
@@ -620,6 +765,7 @@ local function main()
     p(G .."  [1]"..NC.." 📥  Download & Install APK")
     p(R  .."  [2]"..NC.." 🗑️   Uninstall Package")
     p(Y  .."  [3]"..NC.." 📋  Lihat Daftar File")
+    p(B  .."  [4]"..NC.." 📤  Kirim Cookie ke Webhook")
     p(B  .."  [0]"..NC.."     Keluar")
     p("")
     divider()
@@ -628,6 +774,7 @@ local function main()
 
     if     c == "1" then menu_download()
     elseif c == "2" then menu_uninstall()
+    elseif c == "4" then menu_webhook()
     elseif c == "3" then
         divider()
         p(B.."  Pilih Preset untuk Lihat Daftar File:"..NC); p("")
