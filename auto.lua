@@ -533,6 +533,10 @@ local function menu_download()
     pr(B.."  Pilihan: "..NC)
     local input = trim(read_line()); p("")
 
+    if input == "" or input == "0" then
+        return menu_download()
+    end
+
     local sel = parse_selection(input, #apk_files)
     if #sel == 0 then
         p(R.."  Pilihan tidak valid."..NC); return
