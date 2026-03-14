@@ -1,5 +1,17 @@
 #!/bin/bash
 
+# ===== FUNGSI CEK PACKAGE =====
+check_and_install() {
+    local pkg_name=$1
+    if pkg list-installed 2>/dev/null | grep -q "^$pkg_name/"; then
+        echo "[✓] $pkg_name sudah terinstall, skip"
+    else
+        echo "[*] Menginstall $pkg_name..."
+        pkg install -y $pkg_name
+        echo "[✓] $pkg_name berhasil diinstall"
+    fi
+}
+
 # ===== CEK STORAGE ACCESS =====
 if [ ! -d "/sdcard/Download" ]; then
     echo "[*] Meminta izin akses storage..."
@@ -9,8 +21,11 @@ else
     echo "[✓] Storage sudah bisa diakses, skip termux-setup-storage"
 fi
 
-# ===== INSTALL PACKAGES =====
-pkg install -y lua53 sqlite expect
+# ===== CEK & INSTALL PACKAGES =====
+echo "[*] Mengecek package..."
+check_and_install lua53
+check_and_install sqlite
+check_and_install expect
 
 # ===== CEK DIREKTORI SAAT INI =====
 if [ "$(pwd)" != "/sdcard/Download" ]; then
