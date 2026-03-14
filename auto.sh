@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# ===== FIX MIRROR OTOMATIS =====
+echo "[*] Memperbaiki mirror Termux..."
+sed -i 's|https://mirror.textcord.xyz/termux/termux-main|https://packages.termux.dev/apt/termux-main|g' $PREFIX/etc/apt/sources.list
+pkg update -y
+echo "[✓] Mirror berhasil diperbaiki!"
+
 # ===== FUNGSI CEK PACKAGE =====
 check_and_install() {
     local pkg_name=$1
