@@ -53,7 +53,7 @@ send "1\r"
 sleep 5
 send "4\r"
 sleep 5
-send "1-5\r"
+send "1-6\r"
 
 expect eof
 EOF
