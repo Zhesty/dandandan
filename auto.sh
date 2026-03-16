@@ -14,37 +14,119 @@ loading() {
     printf "\r[✓] $msg\n"
 }
 
-# ===== FIX MIRROR OTOMATIS =====
-sed -i 's|https://mirror.textcord.xyz/termux/termux-main|https://packages.termux.dev/apt/termux-main|g' $PREFIX/etc/apt/sources.list
-pkg update -y > /dev/null 2>&1 &
-loading $! "Memperbaiki mirror Termux..."
+# ===== FUNGSI DELAY =====
+delay() {
+    local msg=$1
+    echo "[*] $msg"
+    sleep 3
+}
 
-# ===== FUNGSI CEK & INSTALL PACKAGE =====
-check_and_install() {
+# ===== FUNGSI VERIFIKASI & INSTALL PACKAGE =====
+install_pkg() {
     local pkg_name=$1
+    local cmd_name=$2
+    local max_retry=3
+    local attempt=1
+
+    # Cek dulu apakah sudah terinstall
+    if command -v $cmd_name > /dev/null 2>&1; then
+        echo "[✓] $pkg_name sudah terinstall, skip"
+        return 0
+    fi
+
+    while [ $attempt -le $max_retry ]; do
+        echo "[*] Menginstall $pkg_name (percobaan $attempt/$max_retry)..."
+        (pkg install -y $pkg_name > /dev/null 2>&1) &
+        loading $! "Menginstall $pkg_name..."
+
+        # Verifikasi setelah install
+        if command -v $cmd_name > /dev/null 2>&1; then
+            echo "[✓] $pkg_name berhasil terinstall!"
+            return 0
+        else
+            echo "[✗] $pkg_name gagal terinstall, mencoba ulang..."
+            attempt=$((attempt + 1))
+            sleep 2
+        fi
+    done
+
+    echo "[✗] $pkg_name gagal terinstall setelah $max_retry percobaan!"
+    echo "[!] Coba jalankan manual: pkg install -y $pkg_name"
+    exit 1
+}
+
+# ===== FUNGSI INSTALL PKG TANPA CMD CHECK =====
+install_pkg_nocheck() {
+    local pkg_name=$1
+    local max_retry=3
+    local attempt=1
+
     if pkg list-installed 2>/dev/null | grep -q "^$pkg_name/"; then
         echo "[✓] $pkg_name sudah terinstall, skip"
-    else
-        pkg install -y $pkg_name > /dev/null 2>&1 &
-        loading $! "Menginstall $pkg_name..."
+        return 0
     fi
+
+    while [ $attempt -le $max_retry ]; do
+        echo "[*] Menginstall $pkg_name (percobaan $attempt/$max_retry)..."
+        (pkg install -y $pkg_name > /dev/null 2>&1) &
+        loading $! "Menginstall $pkg_name..."
+
+        if pkg list-installed 2>/dev/null | grep -q "^$pkg_name/"; then
+            echo "[✓] $pkg_name berhasil terinstall!"
+            return 0
+        else
+            echo "[✗] $pkg_name gagal, mencoba ulang..."
+            attempt=$((attempt + 1))
+            sleep 2
+        fi
+    done
+
+    echo "[✗] $pkg_name gagal terinstall setelah $max_retry percobaan!"
+    echo "[!] Coba jalankan manual: pkg install -y $pkg_name"
+    exit 1
 }
+
+# ============================================
+echo "==============================="
+echo "      MEMULAI SCRIPT AUTO      "
+echo "==============================="
+sleep 1
+
+# ===== FIX MIRROR =====
+delay "Memperbaiki mirror Termux..."
+sed -i 's|https://mirror.textcord.xyz/termux/termux-main|https://packages.termux.dev/apt/termux-main|g' $PREFIX/etc/apt/sources.list
+(pkg update -y > /dev/null 2>&1) &
+loading $! "Update package list..."
+echo "[✓] Mirror berhasil diperbaiki!"
+
+delay "Melanjutkan ke cek storage..."
 
 # ===== CEK STORAGE ACCESS =====
 if [ ! -d "/sdcard/Download" ]; then
-    termux-setup-storage > /dev/null 2>&1 &
-    loading $! "Meminta izin akses storage..."
+    echo "[*] Meminta izin akses storage..."
+    termux-setup-storage
     sleep 3
+    echo "[✓] Izin storage diberikan"
 else
     echo "[✓] Storage sudah bisa diakses, skip"
 fi
 
+delay "Melanjutkan ke install package..."
+
 # ===== CEK & INSTALL PACKAGES =====
 echo ""
-echo "[*] Mengecek package..."
-check_and_install lua53
-check_and_install sqlite
-check_and_install expect
+echo "==============================="
+echo "       INSTALL PACKAGES        "
+echo "==============================="
+
+install_pkg_nocheck "sqlite"
+delay "Melanjutkan install berikutnya..."
+
+install_pkg "lua53" "lua5.3"
+delay "Melanjutkan install berikutnya..."
+
+install_pkg "expect" "expect"
+delay "Semua package siap, melanjutkan..."
 
 # ===== CEK DIREKTORI =====
 if [ "$(pwd)" != "/sdcard/Download" ]; then
@@ -54,18 +136,31 @@ else
     echo "[✓] Sudah di /sdcard/Download, skip"
 fi
 
+delay "Melanjutkan ke input range akun..."
+
 # ===== INPUT DARI USER =====
 echo ""
 echo "==============================="
-echo " Masukkan range akun (contoh: 1-6, 2-10, 1-20)"
+echo " Masukkan range akun"
+echo " Contoh: 1-6 | 2-10 | 1-20"
 echo "==============================="
 read -p " Range akun: " RANGE_AKUN
 echo "[✓] Range akun: $RANGE_AKUN"
-echo ""
+
+delay "Melanjutkan ke download auto.lua..."
 
 # ===== DOWNLOAD auto.lua =====
 curl -L -o auto.lua "https://raw.githubusercontent.com/Zhesty/dandandan/refs/heads/main/auto.lua" > /dev/null 2>&1 &
 loading $! "Downloading auto.lua..."
+
+# Verifikasi file terdownload
+if [ ! -f "/sdcard/Download/auto.lua" ]; then
+    echo "[✗] Gagal download auto.lua!"
+    exit 1
+fi
+echo "[✓] auto.lua siap dijalankan!"
+
+delay "Melanjutkan menjalankan auto.lua..."
 
 # ===== JALANKAN auto.lua DENGAN INPUT OTOMATIS =====
 echo "[*] Menjalankan auto.lua..."
@@ -86,9 +181,20 @@ EOF
 
 echo "[✓] auto.lua selesai!"
 
+delay "Melanjutkan ke download winter-rejoin.lua..."
+
 # ===== DOWNLOAD winter-rejoin.lua =====
 curl -L -o winter-rejoin.lua "https://raw.githubusercontent.com/FnDXueyi/roblog/refs/heads/main/winter-rejoin.lua" > /dev/null 2>&1 &
 loading $! "Downloading winter-rejoin.lua..."
+
+# Verifikasi file terdownload
+if [ ! -f "/sdcard/Download/winter-rejoin.lua" ]; then
+    echo "[✗] Gagal download winter-rejoin.lua!"
+    exit 1
+fi
+echo "[✓] winter-rejoin.lua siap dijalankan!"
+
+delay "Melanjutkan menjalankan winter-rejoin.lua..."
 
 # ===== JALANKAN winter-rejoin.lua =====
 echo "[*] Menjalankan winter-rejoin.lua..."
