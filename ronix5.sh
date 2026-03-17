@@ -167,7 +167,7 @@ send "1\r"
 sleep 5
 send "4\r"
 sleep 5
-send "1-5\r"
+send "6-11\r"
 
 expect eof
 EOF
