@@ -133,25 +133,34 @@ delay "Melanjutkan install berikutnya..."
 install_pkg "expect" "expect"
 delay "Semua package siap, melanjutkan..."
 
-# ===== CEK DIREKTORI =====
-if [ "$(pwd)" != "/sdcard/Download" ]; then
-    cd /sdcard/Download
-    echo "[✓] Pindah ke /sdcard/Download"
-else
-    echo "[✓] Sudah di /sdcard/Download, skip"
-fi
+# ===== CEK & PINDAH DIREKTORI =====
+# Langsung set WORKDIR ke /sdcard/Download tanpa cek pwd
+WORKDIR="/sdcard/Download"
+mkdir -p "$WORKDIR"
+cd "$WORKDIR" || { echo "[✗] Gagal masuk ke $WORKDIR!"; exit 1; }
+echo "[✓] Direktori: $(pwd)"
 
 delay "Melanjutkan ke download auto.lua..."
 
-# ===== DOWNLOAD auto.lua =====
-curl -L -o auto.lua "https://raw.githubusercontent.com/Zhesty/dandandan/refs/heads/main/auto.lua" > /dev/null 2>&1 &
-loading $! "Downloading auto.lua..."
+# ===== CEK & DOWNLOAD auto.lua =====
+echo ""
+echo "==============================="
+echo "        CEK FILE auto.lua      "
+echo "==============================="
 
-if [ ! -f "/sdcard/Download/auto.lua" ]; then
-    echo "[✗] Gagal download auto.lua!"
-    exit 1
+if [ -f "$WORKDIR/auto.lua" ]; then
+    echo "[✓] auto.lua sudah ada, skip download"
+else
+    echo "[*] auto.lua tidak ditemukan, mulai download..."
+    curl -L -o "$WORKDIR/auto.lua" "https://raw.githubusercontent.com/Zhesty/dandandan/refs/heads/main/auto.lua" > /dev/null 2>&1 &
+    loading $! "Downloading auto.lua..."
+
+    if [ ! -f "$WORKDIR/auto.lua" ]; then
+        echo "[✗] Gagal download auto.lua!"
+        exit 1
+    fi
+    echo "[✓] auto.lua berhasil didownload!"
 fi
-echo "[✓] auto.lua siap dijalankan!"
 
 delay "Melanjutkan menjalankan auto.lua..."
 
@@ -160,7 +169,7 @@ echo "[*] Menjalankan auto.lua..."
 expect <<EOF
 set timeout -1
 
-spawn lua /sdcard/Download/auto.lua
+spawn lua $WORKDIR/auto.lua
 
 sleep 5
 send "1\r"
@@ -177,10 +186,10 @@ echo "[✓] auto.lua selesai!"
 delay "Melanjutkan ke download winter-rejoin.lua..."
 
 # ===== DOWNLOAD winter-rejoin.lua =====
-curl -L -o winter-rejoin.lua "https://raw.githubusercontent.com/FnDXueyi/roblog/refs/heads/main/winter-rejoin.lua" > /dev/null 2>&1 &
+curl -L -o "$WORKDIR/winter-rejoin.lua" "https://raw.githubusercontent.com/FnDXueyi/roblog/refs/heads/main/winter-rejoin.lua" > /dev/null 2>&1 &
 loading $! "Downloading winter-rejoin.lua..."
 
-if [ ! -f "/sdcard/Download/winter-rejoin.lua" ]; then
+if [ ! -f "$WORKDIR/winter-rejoin.lua" ]; then
     echo "[✗] Gagal download winter-rejoin.lua!"
     exit 1
 fi
@@ -190,4 +199,4 @@ delay "Melanjutkan menjalankan winter-rejoin.lua..."
 
 # ===== JALANKAN winter-rejoin.lua =====
 echo "[*] Menjalankan winter-rejoin.lua..."
-lua winter-rejoin.lua </dev/null
+lua "$WORKDIR/winter-rejoin.lua" </dev/null
