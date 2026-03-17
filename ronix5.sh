@@ -143,56 +143,48 @@ fi
 
 delay "Melanjutkan ke set DPI..."
 
-# ===== AUTO SET DPI 720 =====
-echo ""
 echo "==============================="
 echo "         SET DPI 720           "
 echo "==============================="
 
-CURRENT_DPI=$(wm density 2>/dev/null | grep -oP '\d+' | tail -1)
+# Ambil DPI saat ini via root
+CURRENT_DPI=$(su -c "wm density" 2>/dev/null | grep -i "override\|physical" | grep -oP '\d+' | tail -1)
+# Fallback kalau root gagal baca
+[ -z "$CURRENT_DPI" ] && CURRENT_DPI=$(wm density 2>/dev/null | grep -oP '\d+' | tail -1)
 
 if [ "$CURRENT_DPI" = "720" ]; then
     echo "[✓] DPI sudah 720, skip"
 else
     echo "[*] DPI saat ini: ${CURRENT_DPI:-unknown}"
-    echo "[*] Mengubah DPI ke 720..."
+    echo "[*] Mengubah DPI ke 720 via root..."
 
-    # Metode 1: wm density langsung
-    if wm density 720 > /dev/null 2>&1; then
-        sleep 2
-        NEW_DPI=$(wm density 2>/dev/null | grep -oP '\d+' | tail -1)
-        if [ "$NEW_DPI" = "720" ]; then
-            echo "[✓] DPI berhasil diubah ke 720 (wm density)!"
-        fi
-
-    # Metode 2: via root su + wm density
-    elif su -c "wm density 720" > /dev/null 2>&1; then
+    # Metode 1: root + wm density (paling stabil)
+    if su -c "wm density 720" > /dev/null 2>&1; then
         sleep 2
         NEW_DPI=$(su -c "wm density" 2>/dev/null | grep -oP '\d+' | tail -1)
         if [ "$NEW_DPI" = "720" ]; then
-            echo "[✓] DPI berhasil diubah ke 720 (root su)!"
+            echo "[✓] DPI berhasil diubah ke 720 (root + wm density)!"
         else
-            echo "[!] Root tersedia tapi DPI gagal diubah"
+            # Metode 2: resetprop via Magisk
+            echo "[*] Mencoba via resetprop..."
+            su -c "resetprop ro.sf.lcd_density 720" > /dev/null 2>&1
+            su -c "wm density 720" > /dev/null 2>&1
+            sleep 2
+            NEW_DPI=$(su -c "getprop ro.sf.lcd_density" 2>/dev/null)
+            if [ "$NEW_DPI" = "720" ]; then
+                echo "[✓] DPI berhasil diubah ke 720 (resetprop)!"
+            else
+                echo "[!] Gagal set DPI via root, coba manual:"
+                echo "    su -c 'wm density 720'"
+            fi
         fi
 
-    # Metode 3: via root resetprop (Magisk)
-    elif su -c "id" > /dev/null 2>&1; then
-        echo "[*] Mencoba ubah DPI via resetprop (Magisk)..."
-        su -c "resetprop ro.sf.lcd_density 720" > /dev/null 2>&1
-        sleep 2
-        NEW_DPI=$(su -c "getprop ro.sf.lcd_density" 2>/dev/null)
-        if [ "$NEW_DPI" = "720" ]; then
-            echo "[✓] DPI berhasil diubah ke 720 (resetprop)!"
-        else
-            echo "[!] Gagal via resetprop"
-        fi
-
-    # Tidak ada akses apapun
+    # Tidak ada root
     else
-        echo "[!] Tidak ada akses root maupun ADB"
+        echo "[!] Tidak ada akses root!"
         echo "[!] Cara manual:"
-        echo "    Root  : su -c 'wm density 720'"
-        echo "    ADB   : adb shell wm density 720"
+        echo "    Root : su -c 'wm density 720'"
+        echo "    ADB  : adb shell wm density 720"
     fi
 fi
 
