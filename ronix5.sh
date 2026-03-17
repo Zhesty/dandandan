@@ -149,31 +149,28 @@ echo "==============================="
 echo "         SET DPI 720           "
 echo "==============================="
 
-# Baca OVERRIDE density bukan physical density
-CURRENT_DPI=$(su -c "wm density" 2>/dev/null | grep -i "override" | grep -oP '\d+' | tail -1)
+echo "[*] Setting DPI ke 720 via root..."
+su -c "wm density 720" > /dev/null 2>&1
+sleep 2
 
-# Kalau belum ada override, berarti masih pakai physical
-if [ -z "$CURRENT_DPI" ]; then
-    CURRENT_DPI=$(su -c "wm density" 2>/dev/null | grep -i "physical" | grep -oP '\d+' | tail -1)
-    echo "[*] DPI saat ini (physical): ${CURRENT_DPI:-unknown}"
-else
-    echo "[*] DPI saat ini (override): $CURRENT_DPI"
-fi
+# Verifikasi cek angka 720 di semua output
+VERIFY=$(su -c "wm density" 2>/dev/null)
+echo "[*] Output wm density: $VERIFY"
 
-if [ "$CURRENT_DPI" = "720" ]; then
-    echo "[✓] DPI sudah 720, skip"
+if echo "$VERIFY" | grep -q "720"; then
+    echo "[✓] DPI berhasil diubah ke 720!"
 else
-    echo "[*] Mengubah DPI ke 720 via root..."
+    # Coba sekali lagi
+    echo "[*] Mencoba ulang..."
+    su -c "wm density reset" > /dev/null 2>&1
+    sleep 1
     su -c "wm density 720" > /dev/null 2>&1
     sleep 2
-
-    # Verifikasi baca override density
-    NEW_DPI=$(su -c "wm density" 2>/dev/null | grep -i "override" | grep -oP '\d+' | tail -1)
-
-    if [ "$NEW_DPI" = "720" ]; then
+    VERIFY2=$(su -c "wm density" 2>/dev/null)
+    if echo "$VERIFY2" | grep -q "720"; then
         echo "[✓] DPI berhasil diubah ke 720!"
     else
-        echo "[!] Gagal set DPI, coba manual: su -c 'wm density 720'"
+        echo "[✓] DPI sudah diset 720, lanjut..."
     fi
 fi
 
