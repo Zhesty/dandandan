@@ -141,39 +141,6 @@ else
     echo "[✓] Sudah di /sdcard/Download, skip"
 fi
 
-delay "Melanjutkan ke set DPI..."
-
-# ===== AUTO SET DPI 720 =====
-echo ""
-echo "==============================="
-echo "         SET DPI 720           "
-echo "==============================="
-
-echo "[*] Setting DPI ke 720 via root..."
-su -c "wm density 720" > /dev/null 2>&1
-sleep 2
-
-# Verifikasi cek angka 720 di semua output
-VERIFY=$(su -c "wm density" 2>/dev/null)
-echo "[*] Output wm density: $VERIFY"
-
-if echo "$VERIFY" | grep -q "720"; then
-    echo "[✓] DPI berhasil diubah ke 720!"
-else
-    # Coba sekali lagi
-    echo "[*] Mencoba ulang..."
-    su -c "wm density reset" > /dev/null 2>&1
-    sleep 1
-    su -c "wm density 720" > /dev/null 2>&1
-    sleep 2
-    VERIFY2=$(su -c "wm density" 2>/dev/null)
-    if echo "$VERIFY2" | grep -q "720"; then
-        echo "[✓] DPI berhasil diubah ke 720!"
-    else
-        echo "[✓] DPI sudah diset 720, lanjut..."
-    fi
-fi
-
 delay "Melanjutkan ke download auto.lua..."
 
 # ===== DOWNLOAD auto.lua =====
