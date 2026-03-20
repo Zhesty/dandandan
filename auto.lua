@@ -1,10 +1,4 @@
 #!/data/data/com.termux/files/usr/bin/lua
--- ============================================================
---   DanzoInstall Termux Manager v12
---   Website : https://danzoinstall.anistioj.workers.dev
---   Folder  : 9pxaypjv
---   Deps    : pkg install lua54 curl
--- ============================================================
 
 local BASE_URL  = "https://danzoinstall.anistioj.workers.dev"
 local R2_URL    = "https://pub-ff1d15d748904c1bb178166d90f22db5.r2.dev"
@@ -13,7 +7,7 @@ local DEST         = "/storage/emulated/0/Download"
 local COOKIE_FILE  = "/storage/emulated/0/Download/cookie.txt"
 local WEBHOOK_CFG  = os.getenv("HOME") .. "/danzo_tmp/webhook.cfg"
 
--- ── Preset Folders ───────────────────────────────────────────
+
 local PRESET_FOLDERS = {
     { name = "Codex",   id = "2z8whpzj" },
     { name = "Cryptic", id = "844gr7st" },
@@ -22,7 +16,6 @@ local PRESET_FOLDERS = {
     { name = "Ronix",   id = "dzf52ez7" },
 }
 
--- ── Warna ───────────────────────────────────────────────────
 local R  = "\27[0m"
 local G  = "\27[0m"
 local Y  = "\27[0m"
@@ -30,7 +23,6 @@ local B  = "\27[1m"
 local CY = "\27[1m"
 local NC = "\27[0m"
 
--- ── Print helpers ────────────────────────────────────────────
 local function p(s)  io.write((s or "").."\n"); io.stdout:flush() end
 local function pr(s) io.write(s or "");         io.stdout:flush() end
 
@@ -46,7 +38,6 @@ end
 
 local function trim(s) return (s or ""):match("^%s*(.-)%s*$") end
 
--- ── FIX: baca input dari /dev/tty ────────────────────────────
 local function read_line()
     io.stdout:flush()
     local tty = io.open("/dev/tty", "r")
@@ -58,7 +49,6 @@ local function read_line()
     return io.read("*l") or ""
 end
 
--- ── Shell ────────────────────────────────────────────────────
 local function exec(cmd)
     local h = io.popen(cmd.." 2>&1 </dev/null")
     local r = h:read("*a"); h:close()
@@ -94,7 +84,6 @@ local function file_size(path)
     return s or "?"
 end
 
--- ── Banner ───────────────────────────────────────────────────
 local function banner()
     exec_code("clear 2>/dev/null")
     divider()
@@ -105,7 +94,6 @@ local function banner()
     divider()
 end
 
--- ── Deps ─────────────────────────────────────────────────────
 local function ensure_deps()
     p(CY.."[~] Cek dependensi..."..NC)
     if not check_cmd("curl") then
@@ -124,9 +112,7 @@ local function ensure_deps()
     p("")
 end
 
--- ════════════════════════════════════════════════════════════
---   PARSE SELECTION (dari script user)
--- ════════════════════════════════════════════════════════════
+
 local function parse_selection(input, max)
     input = trim(input):lower()
     if input == "all" then
@@ -156,9 +142,6 @@ local function parse_selection(input, max)
     return selected
 end
 
--- ════════════════════════════════════════════════════════════
---   INSTALL APK (persis snippet user)
--- ════════════════════════════════════════════════════════════
 local function install_apk(filepath, num, total)
     divider()
     if not filepath or not file_exists(filepath) then
@@ -182,9 +165,8 @@ local function install_apk(filepath, num, total)
     p(""); return false
 end
 
--- ════════════════════════════════════════════════════════════
---   UNINSTALL (dari script user, dengan read_line fix)
--- ════════════════════════════════════════════════════════════
+local menu_download
+
 local KNOWN_PACKAGES = {
     { name = "WhatsApp",    pkg = "com.whatsapp" },
     { name = "Instagram",   pkg = "com.instagram.android" },
@@ -239,7 +221,6 @@ local function menu_uninstall()
     local installed = {}
     local seen_pkg  = {}
 
-    -- Scan com.roblox* otomatis
     local roblox_pkgs = scan_by_keyword("com.roblox")
     for _, pkg in ipairs(roblox_pkgs) do
         if not seen_pkg[pkg] then
@@ -251,7 +232,6 @@ local function menu_uninstall()
         end
     end
 
-    -- Scan KNOWN_PACKAGES lainnya
     for _, entry in ipairs(KNOWN_PACKAGES) do
         if not seen_pkg[entry.pkg] and is_installed(entry.pkg) then
             table.insert(installed, entry)
@@ -259,7 +239,6 @@ local function menu_uninstall()
         end
     end
 
-    -- Tampilkan daftar
     divider()
     p(B.."  Package yang terdeteksi:"..NC); p("")
 
@@ -284,10 +263,8 @@ local function menu_uninstall()
     local input = trim(read_line())
     p("")
 
-    -- Kembali
     if input == "0" then return end
 
-    -- Scan keyword lain
     if input:lower() == "s" then
         pr(B.."  Keyword (mis: com.google): "..NC)
         local kw = trim(read_line())
@@ -310,31 +287,15 @@ local function menu_uninstall()
         if #sel == 0 then p(R.."  Pilihan tidak valid."..NC); return end
         divider()
         local ok_c, fail_c = 0, 0
-        local roblox_found_s = false
         for _, i in ipairs(sel) do
-            local success = do_uninstall(pkgs[i], pkgs[i])
-            if success then
-                ok_c = ok_c+1
-                if pkgs[i]:match("com%.roblox") then roblox_found_s = true end
-            else
-                fail_c = fail_c+1
-            end
+            if do_uninstall(pkgs[i], pkgs[i]) then ok_c = ok_c+1 else fail_c = fail_c+1 end
         end
         p("")
         p(G.."  Berhasil : "..ok_c..NC)
         p(R.."  Gagal    : "..fail_c..NC)
-        divider(); p("")
-        if roblox_found_s then
-            p(CY.."  ✅ Roblox berjaya diuninstall!"..NC)
-            p(B.."  ⏳ Masuk ke menu Download & Install secara automatik..."..NC)
-            p(""); pr(B.."  [Enter] untuk teruskan atau tunggu 3 saat..."..NC)
-            os.execute("read -t 3 < /dev/tty 2>/dev/null || sleep 3")
-            p(""); menu_download(); return
-        end
-        return
+        divider(); p(""); return
     end
 
-    -- Manual input
     if input:lower() == "m" then
         pr(B.."  Package ID: "..NC)
         local pkg = trim(read_line())
@@ -342,22 +303,12 @@ local function menu_uninstall()
         divider()
         if not is_installed(pkg) then
             p(Y.."  [!] Package tidak terpasang: "..pkg..NC)
-            p(""); return
         else
-            local success = do_uninstall(pkg, pkg)
-            p("")
-            if success and pkg:match("com%.roblox") then
-                p(CY.."  ✅ Roblox berjaya diuninstall!"..NC)
-                p(B.."  ⏳ Masuk ke menu Download & Install secara automatik..."..NC)
-                p(""); pr(B.."  [Enter] untuk teruskan atau tunggu 3 saat..."..NC)
-                os.execute("read -t 3 < /dev/tty 2>/dev/null || sleep 3")
-                p(""); menu_download(); return
-            end
+            do_uninstall(pkg, pkg)
         end
-        return
+        p(""); return
     end
 
-    -- Pilih dari daftar
     if #installed == 0 then
         p(R.."  Tidak ada package untuk diuninstall."..NC); return
     end
@@ -372,7 +323,6 @@ local function menu_uninstall()
 
     if #sel == 0 then p(R.."  Pilihan tidak valid."..NC); return end
 
-    -- Konfirmasi
     divider()
     p(R..B.."  ⚠️  Akan diuninstall:"..NC); p("")
     for _, i in ipairs(sel) do
@@ -383,18 +333,11 @@ local function menu_uninstall()
     local confirm = trim(read_line()):lower(); p("")
     if confirm ~= "y" then p(Y.."  Dibatalkan."..NC); return end
 
-    -- Proses uninstall
     divider()
     local ok_count, fail_count = 0, 0
-    local roblox_uninstalled = false
     for _, i in ipairs(sel) do
-        local success = do_uninstall(installed[i].pkg, installed[i].name)
-        if success then
+        if do_uninstall(installed[i].pkg, installed[i].name) then
             ok_count = ok_count+1
-            -- Cek sama ada package yang berjaya diuninstall adalah Roblox
-            if installed[i].pkg:match("com%.roblox") then
-                roblox_uninstalled = true
-            end
         else
             fail_count = fail_count+1
         end
@@ -406,28 +349,8 @@ local function menu_uninstall()
     p(G.."  Berhasil : "..ok_count..NC)
     p(R.."  Gagal    : "..fail_count..NC)
     divider(); p("")
-
-    -- Auto-redirect ke menu Download & Install jika Roblox berjaya diuninstall
-    if roblox_uninstalled then
-        p(CY.."  ✅ Roblox berjaya diuninstall!"..NC)
-        p(B.."  ⏳ Masuk ke menu Download & Install secara automatik..."..NC)
-        p(""); pr(B.."  [Enter] untuk teruskan atau tunggu 3 saat..."..NC)
-        -- Tunggu 3 saat atau tekan Enter
-        local tty = io.open("/dev/tty", "r")
-        if tty then
-            os.execute("read -t 3 < /dev/tty 2>/dev/null"); tty:close()
-        else
-            os.execute("sleep 3")
-        end
-        p("")
-        menu_download()
-        return
-    end
 end
 
--- ════════════════════════════════════════════════════════════
---   DOWNLOAD & INSTALL (DanzoInstall R2)
--- ════════════════════════════════════════════════════════════
 local function parse_filelist(str, folder_id)
     local files = {}
     for obj in str:gmatch("{([^{}]+)}") do
@@ -503,7 +426,6 @@ local function download_file(file, num, total)
     end
 end
 
--- ── Cek file lokal di /sdcard/Download ──────────────────────
 local function find_local_apk(filename)
     local safe = filename:gsub("[/\\:*?\"<>|]", "_")
     local path = DEST.."/"..safe
@@ -511,7 +433,6 @@ local function find_local_apk(filename)
     return nil
 end
 
--- ── Pilih Preset Folder ──────────────────────────────────────
 local function select_preset_folder()
     exec_code("clear 2>/dev/null")
     divider()
@@ -540,8 +461,7 @@ local function select_preset_folder()
     return nil
 end
 
-local function menu_download()
-    -- ── 1. Pilih preset folder ───────────────────────────────
+menu_download = function()
     local preset = select_preset_folder()
     if not preset then return end
 
@@ -550,7 +470,6 @@ local function menu_download()
     divider()
     p(B.."  Folder: "..preset.name..NC); p("")
 
-    -- ── 2. Ambil daftar file dari folder ────────────────────
     local files = list_files(active_folder)
     if #files == 0 then return end
 
@@ -565,12 +484,10 @@ local function menu_download()
         p(""); return
     end
 
-    -- Urutkan A-Z
     table.sort(apk_files, function(a, b)
         return a.name:lower() < b.name:lower()
     end)
 
-    -- ── 3. Tampilkan daftar APK untuk dipilih ───────────────
     divider()
     p(B.."  APK tersedia di "..preset.name..":"..NC); p("")
     for i, f in ipairs(apk_files) do
@@ -596,13 +513,11 @@ local function menu_download()
     local to_process = {}
     for _, i in ipairs(sel) do table.insert(to_process, apk_files[i]) end
 
-    -- ── 4. Deteksi file pilihan yang sudah ada di /sdcard/Download ──
     local already_local = {}
     for _, f in ipairs(to_process) do
         already_local[f.name] = find_local_apk(f.name)
     end
 
-    -- ── 5. Download yang belum ada, skip yang sudah ada ─────
     p(""); divider()
     p(B.."  📥 Proses Download ("..#to_process.." file)..."..NC); p("")
     local dl_paths = {}
@@ -625,7 +540,6 @@ local function menu_download()
         end
     end
 
-    -- ── 6. Install ───────────────────────────────────────────
     divider()
     p(B.."  📲 Install ("..#to_process.." file)..."..NC); p("")
     local ok_count, fail_count = 0, 0
@@ -636,12 +550,10 @@ local function menu_download()
         else        fail_count = fail_count+1; table.insert(statuses, "GAGAL") end
     end
 
-    -- ── 7. Hapus semua file setelah proses selesai ───────────
     for i, _ in ipairs(to_process) do
         if dl_paths[i] then os.remove(dl_paths[i]) end
     end
 
-    -- ── 7. Ringkasan ─────────────────────────────────────────
     divider()
     p(B.."  📊 Ringkasan Install — "..preset.name..":"..NC); p("")
     for i, f in ipairs(to_process) do
@@ -661,10 +573,6 @@ local function menu_download()
     os.exit(0)
 end
 
-
--- ════════════════════════════════════════════════════════════
---   WEBHOOK
--- ════════════════════════════════════════════════════════════
 local function load_webhook()
     local f = io.open(WEBHOOK_CFG, "r")
     if not f then return "" end
@@ -687,7 +595,6 @@ local function menu_webhook()
 
     local webhook_url = load_webhook()
 
-    -- Tampilkan URL tersimpan
     if webhook_url ~= "" then
         p(B.."  Webhook aktif:"..NC)
         p("  "..trunc(webhook_url, 55)); p("")
@@ -703,7 +610,6 @@ local function menu_webhook()
     local c = trim(read_line()); p("")
 
     if c == "2" then
-        -- Setting webhook URL
         divider()
         p(B.."  Masukkan Webhook URL:"..NC); p("")
         pr(B.."  URL: "..NC)
@@ -723,7 +629,6 @@ local function menu_webhook()
         return menu_webhook()
 
     elseif c == "1" then
-        -- Kirim cookie.txt
         divider()
         if webhook_url == "" then
             p(B.."  [✗] Webhook URL belum diset. Pilih [1] dulu."..NC)
