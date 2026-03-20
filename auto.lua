@@ -310,13 +310,28 @@ local function menu_uninstall()
         if #sel == 0 then p(R.."  Pilihan tidak valid."..NC); return end
         divider()
         local ok_c, fail_c = 0, 0
+        local roblox_found_s = false
         for _, i in ipairs(sel) do
-            if do_uninstall(pkgs[i], pkgs[i]) then ok_c = ok_c+1 else fail_c = fail_c+1 end
+            local success = do_uninstall(pkgs[i], pkgs[i])
+            if success then
+                ok_c = ok_c+1
+                if pkgs[i]:match("com%.roblox") then roblox_found_s = true end
+            else
+                fail_c = fail_c+1
+            end
         end
         p("")
         p(G.."  Berhasil : "..ok_c..NC)
         p(R.."  Gagal    : "..fail_c..NC)
-        divider(); p(""); return
+        divider(); p("")
+        if roblox_found_s then
+            p(CY.."  ✅ Roblox berjaya diuninstall!"..NC)
+            p(B.."  ⏳ Masuk ke menu Download & Install secara automatik..."..NC)
+            p(""); pr(B.."  [Enter] untuk teruskan atau tunggu 3 saat..."..NC)
+            os.execute("read -t 3 < /dev/tty 2>/dev/null || sleep 3")
+            p(""); menu_download(); return
+        end
+        return
     end
 
     -- Manual input
@@ -327,10 +342,19 @@ local function menu_uninstall()
         divider()
         if not is_installed(pkg) then
             p(Y.."  [!] Package tidak terpasang: "..pkg..NC)
+            p(""); return
         else
-            do_uninstall(pkg, pkg)
+            local success = do_uninstall(pkg, pkg)
+            p("")
+            if success and pkg:match("com%.roblox") then
+                p(CY.."  ✅ Roblox berjaya diuninstall!"..NC)
+                p(B.."  ⏳ Masuk ke menu Download & Install secara automatik..."..NC)
+                p(""); pr(B.."  [Enter] untuk teruskan atau tunggu 3 saat..."..NC)
+                os.execute("read -t 3 < /dev/tty 2>/dev/null || sleep 3")
+                p(""); menu_download(); return
+            end
         end
-        p(""); return
+        return
     end
 
     -- Pilih dari daftar
@@ -362,9 +386,15 @@ local function menu_uninstall()
     -- Proses uninstall
     divider()
     local ok_count, fail_count = 0, 0
+    local roblox_uninstalled = false
     for _, i in ipairs(sel) do
-        if do_uninstall(installed[i].pkg, installed[i].name) then
+        local success = do_uninstall(installed[i].pkg, installed[i].name)
+        if success then
             ok_count = ok_count+1
+            -- Cek sama ada package yang berjaya diuninstall adalah Roblox
+            if installed[i].pkg:match("com%.roblox") then
+                roblox_uninstalled = true
+            end
         else
             fail_count = fail_count+1
         end
@@ -376,6 +406,23 @@ local function menu_uninstall()
     p(G.."  Berhasil : "..ok_count..NC)
     p(R.."  Gagal    : "..fail_count..NC)
     divider(); p("")
+
+    -- Auto-redirect ke menu Download & Install jika Roblox berjaya diuninstall
+    if roblox_uninstalled then
+        p(CY.."  ✅ Roblox berjaya diuninstall!"..NC)
+        p(B.."  ⏳ Masuk ke menu Download & Install secara automatik..."..NC)
+        p(""); pr(B.."  [Enter] untuk teruskan atau tunggu 3 saat..."..NC)
+        -- Tunggu 3 saat atau tekan Enter
+        local tty = io.open("/dev/tty", "r")
+        if tty then
+            os.execute("read -t 3 < /dev/tty 2>/dev/null"); tty:close()
+        else
+            os.execute("sleep 3")
+        end
+        p("")
+        menu_download()
+        return
+    end
 end
 
 -- ════════════════════════════════════════════════════════════
