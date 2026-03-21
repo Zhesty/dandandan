@@ -17,7 +17,7 @@ local WEBHOOK_CFG  = os.getenv("HOME") .. "/danzo_tmp/webhook.cfg"
 local PRESET_FOLDERS = {
     { name = "Codex",   id = "2z8whpzj" },
     { name = "Cryptic", id = "844gr7st" },
-    { name = "Delta",   id = "v8jf3etu" },
+    { name = "Delta",   id = "f8ujxmej" },
     { name = "PunkX",   id = "q78znem3" },
     { name = "Ronix",   id = "dzf52ez7" },
 }
