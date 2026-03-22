@@ -18,7 +18,6 @@ def load_config(path):
         print(f"     GITHUB_TOKEN=token_github_kamu")
         print(f"     GITHUB_REPO=username/repo-name")
         print(f"     GITHUB_BRANCH=main")
-        print(f"     GITHUB_PATH=auto.lua")
         print(f"     ALLOWED_CHANNEL=")
         exit(1)
     with open(path, "r") as f:
@@ -53,6 +52,11 @@ client = discord.Client(intents=intents)
 
 GITHUB_API = "https://api.github.com"
 
+# Simpan sesi !edit yang sedang menunggu pilihan user
+# Format: { user_id: { "files": [...], "attachment": ..., "message": ... } }
+pending_edit = {}
+
+# ── GitHub Helpers ────────────────────────────────────────────
 async def get_file_sha(session, repo, path, branch):
     url = f"{GITHUB_API}/repos/{repo}/contents/{path}?ref={branch}"
     headers = {
@@ -64,6 +68,22 @@ async def get_file_sha(session, repo, path, branch):
             data = await resp.json()
             return data.get("sha")
         return None
+
+async def list_repo_files(path=""):
+    """Ambil semua file dari repo secara rekursif"""
+    url = f"{GITHUB_API}/repos/{GITHUB_REPO}/git/trees/{GITHUB_BRANCH}?recursive=1"
+    headers = {
+        "Authorization": f"token {GITHUB_TOKEN}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                # Hanya ambil tipe "blob" (file, bukan folder)
+                files = [item["path"] for item in data.get("tree", []) if item["type"] == "blob"]
+                return files
+            return []
 
 async def push_to_github(file_bytes, github_path, commit_msg):
     async with aiohttp.ClientSession() as session:
@@ -104,9 +124,9 @@ async def handle_push(message, attachment, github_path, mode):
     filename = attachment.filename
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     mode_label = "Upload File Baru" if mode == "upload" else "Edit File"
-    commit_msg = f"{mode}: {filename} via Discord by {message.author.name} [{now}]"
+    commit_msg = f"{mode}: {github_path} via Discord by {message.author.name} [{now}]"
 
-    status_msg = await message.reply(f"⏳ **Sedang memproses `{filename}`...**")
+    status_msg = await message.reply(f"⏳ **Sedang memproses `{filename}` → `{github_path}`...**")
     try:
         file_bytes = await download_attachment(attachment)
         if not file_bytes:
@@ -132,23 +152,24 @@ async def handle_push(message, attachment, github_path, mode):
     except Exception as e:
         await status_msg.edit(content=f"❌ **Error:** ```{str(e)}```")
 
+# ── Help ──────────────────────────────────────────────────────
 HELP_TEXT = """**📦 Daftar Command Bot GitHub**
 
 `!upload` + lampirkan file
-→ Upload file ke GitHub (path default sesuai config)
-→ Support semua jenis file: `.lua` `.py` `.txt` `.json` dll
+→ Upload file baru ke repo (path = nama file)
 
 `!upload scripts/beta.lua` + lampirkan file
 → Upload ke path custom di repo
 
 `!edit` + lampirkan file
-→ Perbarui file yang sudah ada di repo
+→ Tampilkan daftar file di repo, pilih nomor file yang ingin diedit
 
-`!edit src/main.py` + lampirkan file
-→ Edit file di path custom
+`!edit scripts/auto.lua` + lampirkan file
+→ Langsung edit file di path tertentu tanpa pilih dari daftar
 
 `!help` → tampilkan pesan ini"""
 
+# ── Events ────────────────────────────────────────────────────
 @client.event
 async def on_ready():
     print(f"✅ Bot online: {client.user}")
@@ -165,13 +186,39 @@ async def on_message(message):
         return
 
     content = message.content.strip()
+    user_id = message.author.id
 
+    # ── Cek apakah user sedang dalam sesi pilih file !edit ────
+    if user_id in pending_edit:
+        session = pending_edit[user_id]
+        files = session["files"]
+        attachment = session["attachment"]
+
+        # Batalkan
+        if content.lower() in ("batal", "cancel", "0"):
+            del pending_edit[user_id]
+            await message.reply("❌ **Edit dibatalkan.**")
+            return
+
+        # Pilih nomor
+        if content.isdigit():
+            idx = int(content) - 1
+            if 0 <= idx < len(files):
+                chosen_path = files[idx]
+                del pending_edit[user_id]
+                await handle_push(message, attachment, chosen_path, mode="edit")
+            else:
+                await message.reply(f"⚠️ Nomor tidak valid. Masukkan angka **1–{len(files)}** atau ketik `batal`.")
+            return
+
+    # ── !help ─────────────────────────────────────────────────
     if content.lower() == f"{PREFIX}help":
         await message.reply(HELP_TEXT)
         return
 
+    # ── !upload ───────────────────────────────────────────────
     if content.lower().startswith(f"{PREFIX}upload"):
-        all_files = [a for a in message.attachments]
+        all_files = list(message.attachments)
         if not all_files:
             await message.reply(f"⚠️ Lampirkan file bersama command `{PREFIX}upload`")
             return
@@ -182,16 +229,49 @@ async def on_message(message):
             await handle_push(message, attachment, github_path, mode="upload")
         return
 
+    # ── !edit ─────────────────────────────────────────────────
     if content.lower().startswith(f"{PREFIX}edit"):
-        all_files = [a for a in message.attachments]
+        all_files = list(message.attachments)
         if not all_files:
             await message.reply(f"⚠️ Lampirkan file bersama command `{PREFIX}edit`")
             return
+
         parts = content.split(None, 1)
         custom_path = parts[1].strip() if len(parts) > 1 else None
-        for attachment in all_files:
-            github_path = custom_path if custom_path else attachment.filename
-            await handle_push(message, attachment, github_path, mode="edit")
+
+        # Jika ada path custom, langsung push
+        if custom_path:
+            for attachment in all_files:
+                await handle_push(message, attachment, custom_path, mode="edit")
+            return
+
+        # Tanpa argumen → ambil daftar file dari repo
+        attachment = all_files[0]
+        status_msg = await message.reply("🔍 **Mengambil daftar file dari repo...**")
+
+        files = await list_repo_files()
+        if not files:
+            await status_msg.edit(content="❌ Gagal mengambil daftar file atau repo kosong.")
+            return
+
+        # Tampilkan daftar file
+        lines = [f"📂 **Pilih file yang ingin diedit di `{GITHUB_REPO}`:**\n"]
+        for i, f in enumerate(files, 1):
+            lines.append(f"`{i}.` {f}")
+        lines.append("\n> Balas dengan **nomor** file, atau ketik `batal` untuk membatalkan.")
+
+        # Pecah jika terlalu panjang (Discord limit 2000 char)
+        text = "\n".join(lines)
+        if len(text) > 1900:
+            text = text[:1900] + "\n... (terlalu banyak file, gunakan `!edit path/file` langsung)"
+
+        await status_msg.edit(content=text)
+
+        # Simpan sesi pending
+        pending_edit[user_id] = {
+            "files": files,
+            "attachment": attachment,
+        }
         return
 
 if __name__ == "__main__":
